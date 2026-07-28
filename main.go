@@ -18,6 +18,7 @@ var anyInlineIgnore = regexp.MustCompile(inlineIgnore)
 var startsWithInlineIgnore = regexp.MustCompile("^\\s*" + inlineIgnore)
 var randomInlineIgnore = regexp.MustCompile(`//.*untested section\s+random(\s|:|,|$)`)
 var blockIgnore = regexp.MustCompile("(?m)^([\t ]*)// *untested block(\\s|:|,|$)")
+var randomBlockIgnore = regexp.MustCompile(`// *untested block\s+random(\s|:|,|$)`)
 var perFileIgnore = regexp.MustCompile("// *untested sections: *(\\S+)")
 var generatedFile = regexp.MustCompile("/*generated.*\\.go$")
 
@@ -86,8 +87,8 @@ func checkCoverage(coverageFilePath string) (exitCode int) {
 		configuredUntested, percentUntested, configuredUntestedAtLine := configuredUntestedForFile(readPath)
 		lines := strings.Split(readFile(readPath), "\n")
 
-		// print warnings logs for covered sections
-		warnCoveredInlineIgnore(displayPath, sections, lines)
+		// print warnings logs for covered blocks and sections
+		warnCoveredIgnores(displayPath, sections, lines)
 
 		untested := removeSectionsMarkedWithInlineComment(untestedFromSections(sections), lines)
 		actualUntested := len(untested)
@@ -185,11 +186,8 @@ func findNextIgnoreBlock(sections []Section, current int, lines []string) (ignor
 	// ... then return where it ends
 	whitespace := match[1]
 	search := whitespace + "}"
-	remainingCode := lines[currentStartLine-1:]
-	for i, line := range remainingCode {
-		if strings.HasPrefix(line, search) {
-			return currentStartLine + i
-		}
+	if endIndex := findLineStartingWith(lines, currentStartLine-1, search); endIndex != -1 {
+		return endIndex + 1
 	}
 
 	_, _ = fmt.Fprintf(
@@ -197,6 +195,17 @@ func findNextIgnoreBlock(sections []Section, current int, lines []string) (ignor
 		"go-testcov: unable to find the end of the `// untested block` started between %d and %d, a line starting with %v",
 		prevEndLine, currentStartLine, search,
 	)
+	return -1
+}
+
+// find the first line starting with the search term
+// returns -1 when not found
+func findLineStartingWith(lines []string, searchFromIndex int, search string) int {
+	for i, line := range lines[searchFromIndex:] {
+		if strings.HasPrefix(line, search) {
+			return searchFromIndex + i
+		}
+	}
 	return -1
 }
 
@@ -239,6 +248,12 @@ func untestedFromSections(sections []Section) (untested []Section) {
 	return
 }
 
+// warn when sections/blocks are actually tested
+func warnCoveredIgnores(path string, sections []Section, lines []string) {
+	warnCoveredInlineIgnore(path, sections, lines)
+	warnCoveredBlockIgnore(path, sections, lines)
+}
+
 // warn when inline ignore markers point to code that is actually covered
 func warnCoveredInlineIgnore(path string, sections []Section, lines []string) {
 	for i, line := range lines {
@@ -264,6 +279,47 @@ func warnCoveredInlineIgnore(path string, sections []Section, lines []string) {
 			)
 		}
 	}
+}
+
+// warn when blocks are actually tested
+func warnCoveredBlockIgnore(path string, sections []Section, lines []string) {
+	for i, line := range lines {
+		sourceLine := i + 1
+
+		match := blockIgnore.FindStringSubmatch(line)
+		if match == nil {
+			continue
+		}
+
+		// skip flaky-coverage warnings (goroutines, timing, randomness)
+		if randomBlockIgnore.MatchString(line) {
+			continue
+		}
+
+		search := match[1] + "}"
+		endIndex := findLineStartingWith(lines, i+1, search)
+		if endIndex != -1 && allSectionsInRangeCovered(sections, sourceLine+1, endIndex+1) {
+			_, _ = fmt.Fprintf(
+				os.Stderr,
+				"go-testcov (warn): %v:%v has `// untested block` but the block is tested\n",
+				path, sourceLine,
+			)
+		}
+	}
+}
+
+// true when at least one section is contained in the range and all such sections are covered
+func allSectionsInRangeCovered(sections []Section, startLine int, endLine int) bool {
+	covered := false
+	for _, section := range sections {
+		if startLine <= section.startLine && section.endLine <= endLine {
+			if section.callCount == 0 {
+				return false
+			}
+			covered = true
+		}
+	}
+	return covered
 }
 
 // true when at least one section spans this source line and all such sections are covered

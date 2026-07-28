@@ -557,6 +557,58 @@ var _ = Describe("go-testcov", func() {
 		})
 	})
 
+	Describe("warnCoveredBlockIgnore", func() {
+		It("warns when an untested block is fully covered", func() {
+			stderr := captureStderr(func() {
+				warnCoveredBlockIgnore(
+					"foo.go",
+					[]Section{
+						{"foo.go", 3, 2, 4, 3, 300002, 1},
+						{"foo.go", 4, 3, 4, 8, 400003, 1},
+					},
+					[]string{"", "// untested block", "func foo() {", "\tbar()", "}"},
+				)
+			})
+			Expect(stderr).To(Equal("go-testcov (warn): foo.go:2 has `// untested block` but the block is tested\n"))
+		})
+
+		It("does not warn when an untested block is partially covered", func() {
+			stderr := captureStderr(func() {
+				warnCoveredBlockIgnore(
+					"foo.go",
+					[]Section{
+						{"foo.go", 2, 2, 3, 3, 200002, 1},
+						{"foo.go", 3, 3, 3, 8, 300003, 0},
+					},
+					[]string{"// untested block", "func foo() {", "\tbar()", "}"},
+				)
+			})
+			Expect(stderr).To(Equal(""))
+		})
+
+		It("does not warn when an untested block is uncovered", func() {
+			stderr := captureStderr(func() {
+				warnCoveredBlockIgnore(
+					"foo.go",
+					[]Section{{"foo.go", 2, 2, 3, 3, 200002, 0}},
+					[]string{"// untested block", "func foo() {", "\tbar()", "}"},
+				)
+			})
+			Expect(stderr).To(Equal(""))
+		})
+
+		It("does not warn when an untested block has a random suffix", func() {
+			stderr := captureStderr(func() {
+				warnCoveredBlockIgnore(
+					"foo.go",
+					[]Section{{"foo.go", 2, 2, 3, 3, 200002, 1}},
+					[]string{"// untested block random", "func foo() {", "\tbar()", "}"},
+				)
+			})
+			Expect(stderr).To(Equal(""))
+		})
+	})
+
 	Describe("getSections", func() {
 		It("shows nothing for empty", func() {
 			withTempFile("", func(file *os.File) {
