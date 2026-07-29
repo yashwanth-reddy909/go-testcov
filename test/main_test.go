@@ -478,13 +478,37 @@ var _ = Describe("go-testcov", func() {
 		})
 	})
 
+	Describe("findInlineIgnores", func() {
+		It("finds nothing when there is no inline comment", func() {
+			Expect(findInlineIgnores([]string{"foo"})).To(Equal([]InlineIgnore{}))
+		})
+
+		It("finds a trailing comment", func() {
+			Expect(findInlineIgnores([]string{"foo // untested section"})).To(Equal(
+				[]InlineIgnore{{1, false, false}},
+			))
+		})
+
+		It("finds a comment on its own line", func() {
+			Expect(findInlineIgnores([]string{"// untested section", "foo"})).To(Equal(
+				[]InlineIgnore{{1, true, false}},
+			))
+		})
+
+		It("marks comments with a random suffix", func() {
+			Expect(findInlineIgnores([]string{"foo // untested section random"})).To(Equal(
+				[]InlineIgnore{{1, false, true}},
+			))
+		})
+	})
+
 	Describe("warnCoveredInlineIgnore", func() {
 		It("warns when inline comment is on covered code", func() {
 			stderr := captureStderr(func() {
 				warnCoveredInlineIgnore(
 					"foo.go",
 					[]Section{{"foo.go", 1, 2, 1, 3, 100002, 1}},
-					[]string{"foo // untested section"},
+					findInlineIgnores([]string{"foo // untested section"}),
 				)
 			})
 			Expect(stderr).To(Equal("go-testcov (warn): foo.go:1 has `// untested section` but is tested\n"))
@@ -495,7 +519,7 @@ var _ = Describe("go-testcov", func() {
 				warnCoveredInlineIgnore(
 					"foo.go",
 					[]Section{{"foo.go", 2, 2, 2, 3, 200002, 1}},
-					[]string{"// untested section", "foo"},
+					findInlineIgnores([]string{"// untested section", "foo"}),
 				)
 			})
 			Expect(stderr).To(Equal("go-testcov (warn): foo.go:1 has `// untested section` but the code below is tested\n"))
@@ -506,7 +530,7 @@ var _ = Describe("go-testcov", func() {
 				warnCoveredInlineIgnore(
 					"foo.go",
 					[]Section{{"foo.go", 1, 2, 1, 3, 100002, 1}},
-					[]string{"foo // untested section random"},
+					findInlineIgnores([]string{"foo // untested section random"}),
 				)
 			})
 			Expect(stderr).To(Equal(""))
@@ -517,7 +541,7 @@ var _ = Describe("go-testcov", func() {
 				warnCoveredInlineIgnore(
 					"foo.go",
 					[]Section{{"foo.go", 2, 2, 2, 3, 200002, 1}},
-					[]string{"// untested section random", "foo"},
+					findInlineIgnores([]string{"// untested section random", "foo"}),
 				)
 			})
 			Expect(stderr).To(Equal(""))
@@ -528,7 +552,7 @@ var _ = Describe("go-testcov", func() {
 				warnCoveredInlineIgnore(
 					"foo.go",
 					[]Section{},
-					[]string{"foo // untested section"},
+					findInlineIgnores([]string{"foo // untested section"}),
 				)
 			})
 			Expect(stderr).To(Equal(""))
@@ -542,7 +566,7 @@ var _ = Describe("go-testcov", func() {
 						{"foo.go", 1, 2, 1, 3, 100002, 1},
 						{"foo.go", 1, 4, 1, 6, 100004, 0},
 					},
-					[]string{"foo || bar // untested section"},
+					findInlineIgnores([]string{"foo || bar // untested section"}),
 				)
 			})
 			Expect(stderr).To(Equal(""))
@@ -551,7 +575,7 @@ var _ = Describe("go-testcov", func() {
 		It("keeps random suffix inline comments as ignores", func() {
 			sections := removeSectionsMarkedWithInlineComment(
 				[]Section{{"foo.go", 1, 2, 1, 3, 100002, 0}},
-				[]string{"foo // untested section random"},
+				findInlineIgnores([]string{"foo // untested section random"}),
 				[]BlockIgnore{},
 			)
 			Expect(sections).To(Equal([]Section{}))
