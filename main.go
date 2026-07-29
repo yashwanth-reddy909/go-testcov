@@ -239,29 +239,30 @@ func inlineIgnoreStartsBefore(ignores []InlineIgnore, line int) bool {
 
 // remove sections that are inside a `// untested block` ignore
 func removeSectionsInBlockIgnore(sections []Section, blockIgnores []BlockIgnore) []Section {
-	kept := []Section{}
-	for _, section := range sections {
-		if !inBlockIgnore(blockIgnores, section) {
-			kept = append(kept, section)
-		}
-	}
-	return kept
+	return filter(sections, func(section Section) bool {
+		return !inBlockIgnore(blockIgnores, section)
+	})
 }
 
 // remove sections that are marked with a `// untested section` comment
 // NOTE: this is a bit rough as it does not account for partial lines via start/end characters
 func removeSectionsWithInlineComment(sections []Section, inlineIgnores []InlineIgnore) []Section {
-	kept := []Section{}
-	for _, section := range sections {
-		ignored := false
+	return filter(sections, func(section Section) bool {
 		for lineNumber := section.startLine; lineNumber <= section.endLine; lineNumber++ {
 			if inlineIgnoresLine(inlineIgnores, lineNumber) || inlineIgnoreStartsBefore(inlineIgnores, lineNumber) {
-				ignored = true
-				break
+				return false
 			}
 		}
-		if !ignored {
-			kept = append(kept, section)
+		return true
+	})
+}
+
+// keep only the items for which keep returns true
+func filter[T any](items []T, keep func(T) bool) []T {
+	kept := []T{}
+	for _, item := range items {
+		if keep(item) {
+			kept = append(kept, item)
 		}
 	}
 	return kept
@@ -307,14 +308,10 @@ func getSections(coverageFilePath string) (sections []Section) {
 }
 
 // keep only sections that were not covered (callCount == 0)
-func untestedFromSections(sections []Section) (untested []Section) {
-	untested = []Section{}
-	for _, section := range sections {
-		if section.callCount == 0 {
-			untested = append(untested, section)
-		}
-	}
-	return
+func untestedFromSections(sections []Section) []Section {
+	return filter(sections, func(section Section) bool {
+		return section.callCount == 0
+	})
 }
 
 // warn when inline ignore markers point to code that is actually covered
