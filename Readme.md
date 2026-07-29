@@ -9,7 +9,7 @@
  - Onboard untested code (top of the file `// untested sections: 5` comment, warns when below)
  - Ignore untested files (top of the file `// untested sections: ignore` comment)
  - Ignore large amounts of poorly tested code (top of the file `// untested sections: 50%` comment, does not warn when below that %)
- - Ignore untested functions with `// untested section` comment in function header
+ - Ignore untested functions with `// untested block` comment in function header
  - Run `ginkgo` with `go-testcov ginkgo ./...`
 
 ```
@@ -96,6 +96,24 @@ github.com/foo/bar/main.go:5.3,5.18 1 1
 
 - the `else` case (aka "what if foo(1) returns false") has no coverage information
 - when not using modules the path is `/full/path/to/main.go`
+
+### Block
+
+A "block" is everything from a `// untested block` comment until the closing `}` at the same indentation.
+
+```go
+// untested block
+func main() {
+  if foo(1) {
+      fmt.Print("Hi")
+  }
+  fmt.Print("Ho")
+}
+```
+
+Marking the example above ignores all 3 of its sections.
+
+- put `// untested block` above a function, or above an `if` when all of its sections should be ignored — at the same indentation as that block's closing `}`
 
 
 ## Development
