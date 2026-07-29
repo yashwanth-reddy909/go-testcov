@@ -573,10 +573,9 @@ var _ = Describe("go-testcov", func() {
 		})
 
 		It("keeps random suffix inline comments as ignores", func() {
-			sections := removeSectionsMarkedWithInlineComment(
+			sections := removeSectionsWithInlineComment(
 				[]Section{{"foo.go", 1, 2, 1, 3, 100002, 0}},
 				findInlineIgnores([]string{"foo // untested section random"}),
-				[]BlockIgnore{},
 			)
 			Expect(sections).To(Equal([]Section{}))
 		})

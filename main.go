@@ -95,7 +95,9 @@ func checkCoverage(coverageFilePath string) (exitCode int) {
 		warnCoveredInlineIgnore(displayPath, sections, inlineIgnores)
 		warnCoveredBlockIgnore(displayPath, sections, blockIgnores)
 
-		untested := removeSectionsMarkedWithInlineComment(untestedFromSections(sections), inlineIgnores, blockIgnores)
+		untested := removeSectionsWithInlineComment(
+			removeSectionsInBlockIgnore(untestedFromSections(sections), blockIgnores), inlineIgnores,
+		)
 		actualUntested := len(untested)
 		actualUntestedPercent := int(math.Round(float64(actualUntested) / float64(len(lines)) * 100))
 
@@ -235,21 +237,22 @@ func inlineIgnoreStartsBefore(ignores []InlineIgnore, line int) bool {
 	return false
 }
 
-// keep untested sections that are marked with "untested section" comment
-// need to be careful to not change the list while iterating, see https://pauladamsmith.com/blog/2016/07/go-modify-slice-iteration.html
-// NOTE: this is a bit rough as it does not account for partial lines via start/end characters
-func removeSectionsMarkedWithInlineComment(
-	sections []Section, inlineIgnores []InlineIgnore, blockIgnores []BlockIgnore,
-) []Section {
-	uncheckedSections := sections
-	sections = []Section{}
-
-	for _, section := range uncheckedSections {
-		// inside an ignored block, then skip
-		if inBlockIgnore(blockIgnores, section) {
-			continue
+// remove sections that are inside a `// untested block` ignore
+func removeSectionsInBlockIgnore(sections []Section, blockIgnores []BlockIgnore) []Section {
+	kept := []Section{}
+	for _, section := range sections {
+		if !inBlockIgnore(blockIgnores, section) {
+			kept = append(kept, section)
 		}
+	}
+	return kept
+}
 
+// remove sections that are marked with a `// untested section` comment
+// NOTE: this is a bit rough as it does not account for partial lines via start/end characters
+func removeSectionsWithInlineComment(sections []Section, inlineIgnores []InlineIgnore) []Section {
+	kept := []Section{}
+	for _, section := range sections {
 		ignored := false
 		for lineNumber := section.startLine; lineNumber <= section.endLine; lineNumber++ {
 			if inlineIgnoresLine(inlineIgnores, lineNumber) || inlineIgnoreStartsBefore(inlineIgnores, lineNumber) {
@@ -258,10 +261,10 @@ func removeSectionsMarkedWithInlineComment(
 			}
 		}
 		if !ignored {
-			sections = append(sections, section) // keep the section
+			kept = append(kept, section)
 		}
 	}
-	return sections
+	return kept
 }
 
 // find the first line starting with the search term
