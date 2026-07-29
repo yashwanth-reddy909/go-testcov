@@ -1,6 +1,6 @@
 module github.com/grosser/go-testcov
 
-go 1.19 // keep in sync with lowest supported version in .github/workflows/test.yml
+go 1.24 // keep in sync with lowest supported version in .github/workflows/test.yml
 
 require (
 	github.com/onsi/ginkgo v1.10.1
