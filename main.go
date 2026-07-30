@@ -13,19 +13,13 @@ import (
 const version = "v1.15.0"
 
 // reused regex
-var inlineIgnore = "//.*untested section(\\s|:|,|$)"
-var anyInlineIgnore = regexp.MustCompile(inlineIgnore)
-var startsWithInlineIgnore = regexp.MustCompile("^\\s*" + inlineIgnore)
-var randomInlineIgnore = regexp.MustCompile(`//.*untested section\s+random(\s|:|,|$)`)
-var blockIgnore = regexp.MustCompile("(?m)^([\t ]*)// *untested block(\\s|:|,|$)")
-var randomBlockIgnore = regexp.MustCompile(`// *untested block\s+random(\s|:|,|$)`)
 var perFileIgnore = regexp.MustCompile("// *untested sections: *(\\S+)")
 var generatedFile = regexp.MustCompile("/*generated.*\\.go$")
 
 // test injection point to enable test coverage of exit behavior
 var exitFunction = os.Exit
 
-// delegate to runGoTestAndCheckCoverage, so we have an easy to test method
+// delegates to runGoTestAndCheckCoverage, so we have an easy to test method
 func main() {
 	argv := os.Args[1:len(os.Args)] // remove go-testcov
 
@@ -140,113 +134,6 @@ func printUntestedSections(sections []Section, displayPath string, details strin
 	}
 }
 
-// a `// untested block` comment and the lines of the block it ignores
-type BlockIgnore struct {
-	commentLine int // line the `// untested block` comment is on
-	startLine   int // first line of the ignored block
-	endLine     int // last line of the ignored block, the closing `}`
-	random      bool
-}
-
-// find all `// untested block` comments and the blocks they ignore
-// warns about comments whose block end cannot be found, they ignore nothing
-func findBlockIgnores(lines []string) (ignores []BlockIgnore) {
-	ignores = []BlockIgnore{}
-
-	for i, line := range lines {
-		match := blockIgnore.FindStringSubmatch(line)
-		if match == nil {
-			continue
-		}
-
-		commentLine := i + 1
-		indentation := match[1]
-		search := indentation + "}"
-		endIndex := findLineStartingWith(lines, commentLine, search)
-		if endIndex == -1 {
-			_, _ = fmt.Fprintf(
-				os.Stderr,
-				"go-testcov: unable to find the end of the `// untested block` on line %d, a line starting with %v",
-				commentLine, search,
-			)
-			continue
-		}
-
-		ignores = append(ignores, BlockIgnore{
-			commentLine: commentLine,
-			startLine:   commentLine + 1,
-			endLine:     endIndex + 1,
-			random:      randomBlockIgnore.MatchString(line),
-		})
-	}
-	return
-}
-
-// true when the section is inside one of the given ignored blocks
-func inBlockIgnore(ignores []BlockIgnore, section Section) bool {
-	for _, ignore := range ignores {
-		if ignore.startLine <= section.startLine && section.endLine <= ignore.endLine {
-			return true
-		}
-	}
-	return false
-}
-
-// remove sections that are inside a `// untested block` ignore
-func removeSectionsInBlockIgnore(sections []Section, blockIgnores []BlockIgnore) []Section {
-	return filter(sections, func(section Section) bool {
-		return !inBlockIgnore(blockIgnores, section)
-	})
-}
-
-// a `// untested section` comment, either trailing on a line or on its own line above the code
-type InlineIgnore struct {
-	line       int  // line the comment is on
-	startsLine bool // true when the comment is the whole line, so it also ignores the line below
-	random     bool
-}
-
-// find all `// untested section` comments
-func findInlineIgnores(lines []string) (ignores []InlineIgnore) {
-	ignores = []InlineIgnore{}
-
-	for i, line := range lines {
-		if !anyInlineIgnore.MatchString(line) {
-			continue
-		}
-
-		ignores = append(ignores, InlineIgnore{
-			line:       i + 1,
-			startsLine: startsWithInlineIgnore.MatchString(line),
-			random:     randomInlineIgnore.MatchString(line),
-		})
-	}
-	return
-}
-
-// true when the line is ignored by one of the given inline comments
-func inInlineIgnore(ignores []InlineIgnore, line int) bool {
-	for _, ignore := range ignores {
-		if ignore.line == line || (ignore.startsLine && ignore.line == line-1) {
-			return true
-		}
-	}
-	return false
-}
-
-// remove sections that are marked with a `// untested section` comment
-// NOTE: this is a bit rough as it does not account for partial lines via start/end characters
-func removeSectionsInInlineIgnore(sections []Section, inlineIgnores []InlineIgnore) []Section {
-	return filter(sections, func(section Section) bool {
-		for lineNumber := section.startLine; lineNumber <= section.endLine; lineNumber++ {
-			if inInlineIgnore(inlineIgnores, lineNumber) {
-				return false
-			}
-		}
-		return true
-	})
-}
-
 // keep only the items for which keep returns true
 func filter[T any](items []T, keep func(T) bool) []T {
 	kept := []T{}
@@ -256,17 +143,6 @@ func filter[T any](items []T, keep func(T) bool) []T {
 		}
 	}
 	return kept
-}
-
-// find the first line starting with the search term
-// returns -1 when not found
-func findLineStartingWith(lines []string, searchFromIndex int, search string) int {
-	for i, line := range lines[searchFromIndex:] {
-		if strings.HasPrefix(line, search) {
-			return searchFromIndex + i
-		}
-	}
-	return -1
 }
 
 func groupSectionsByPath(sections []Section) (grouped map[string][]Section) {
@@ -302,90 +178,6 @@ func untestedFromSections(sections []Section) []Section {
 	return filter(sections, func(section Section) bool {
 		return section.callCount == 0
 	})
-}
-
-// warn when blocks are actually tested
-func warnCoveredBlockIgnore(path string, sections []Section, blockIgnores []BlockIgnore) {
-	for _, ignore := range blockIgnores {
-		// skip flaky-coverage warnings (goroutines, timing, randomness)
-		if ignore.random {
-			continue
-		}
-
-		if allSectionsInRangeCovered(sections, ignore.startLine, ignore.endLine) {
-			_, _ = fmt.Fprintf(
-				os.Stderr,
-				"go-testcov (warn): %v:%v has `// untested block` but the block is tested\n",
-				path, ignore.commentLine,
-			)
-		}
-	}
-}
-
-// warn when inline ignore markers point to code that is actually covered
-func warnCoveredInlineIgnore(path string, sections []Section, inlineIgnores []InlineIgnore) {
-	for _, ignore := range inlineIgnores {
-		// skip flaky-coverage warnings (goroutines, timing, randomness)
-		if ignore.random {
-			continue
-		}
-
-		if allSectionsOnLineCovered(sections, ignore.line) {
-			_, _ = fmt.Fprintf(
-				os.Stderr,
-				"go-testcov (warn): %v:%v has `// untested section` but is tested\n",
-				path, ignore.line,
-			)
-		} else if ignore.startsLine && allSectionsStartingAtLineCovered(sections, ignore.line+1) {
-			_, _ = fmt.Fprintf(
-				os.Stderr,
-				"go-testcov (warn): %v:%v has `// untested section` but the code below is tested\n",
-				path, ignore.line,
-			)
-		}
-	}
-}
-
-// true when at least one section is contained in the range and all such sections are covered
-func allSectionsInRangeCovered(sections []Section, startLine int, endLine int) bool {
-	covered := false
-	for _, section := range sections {
-		if startLine <= section.startLine && section.endLine <= endLine {
-			if section.callCount == 0 {
-				return false
-			}
-			covered = true
-		}
-	}
-	return covered
-}
-
-// true when at least one section spans this source line and all such sections are covered
-func allSectionsOnLineCovered(sections []Section, line int) bool {
-	covered := false
-	for _, section := range sections {
-		if section.startLine <= line && line <= section.endLine {
-			if section.callCount == 0 {
-				return false
-			}
-			covered = true
-		}
-	}
-	return covered
-}
-
-// true when at least one section starts exactly on this line and all such sections are covered
-func allSectionsStartingAtLineCovered(sections []Section, line int) bool {
-	covered := false
-	for _, section := range sections {
-		if section.startLine == line {
-			if section.callCount == 0 {
-				return false
-			}
-			covered = true
-		}
-	}
-	return covered
 }
 
 // find relative path of file in current directory
