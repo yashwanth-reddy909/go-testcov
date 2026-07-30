@@ -79,11 +79,35 @@ var _ = Describe("inline ignore", func() {
 			stderr := captureStderr(func() {
 				warnCoveredInlineIgnore(
 					"foo.go",
-					[]Section{},
+					[]Section{{"foo.go", 1, 2, 1, 3, 100002, 0}},
 					findInlineIgnores([]string{"foo // untested section"}),
 				)
 			})
 			Expect(stderr).To(Equal(""))
+		})
+
+		It("warns when inline comment is on a line with no coverage information", func() {
+			stderr := captureStderr(func() {
+				warnCoveredInlineIgnore(
+					"foo.go",
+					[]Section{},
+					findInlineIgnores([]string{"foo // untested section"}),
+				)
+			})
+			Expect(stderr).To(Equal("go-testcov (warn): foo.go:1 has `// untested section` but is tested\n"))
+		})
+
+		It("warns when above-line comment points to a line with no coverage information", func() {
+			stderr := captureStderr(func() {
+				warnCoveredInlineIgnore(
+					"foo.go",
+					[]Section{},
+					findInlineIgnores([]string{"// untested section", "foo"}),
+				)
+			})
+			Expect(stderr).To(Equal(
+				"go-testcov (warn): foo.go:1 has `// untested section` but the code below is tested\n",
+			))
 		})
 
 		It("does not warn when one of multiple sections on the line is uncovered", func() {

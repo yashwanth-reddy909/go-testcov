@@ -68,42 +68,33 @@ func warnCoveredInlineIgnore(path string, sections []Section, inlineIgnores []In
 			continue
 		}
 
-		if allSectionsOnLineCovered(sections, ignore.line) {
-			_, _ = fmt.Fprintf(
-				os.Stderr,
-				"go-testcov (warn): %v:%v has `// untested section` but is tested\n",
-				path, ignore.line,
-			)
-		} else if ignore.startsLine && allSectionsStartingAtLineCovered(sections, ignore.line+1) {
-			_, _ = fmt.Fprintf(
-				os.Stderr,
-				"go-testcov (warn): %v:%v has `// untested section` but the code below is tested\n",
-				path, ignore.line,
-			)
-		}
-	}
-}
-
-// true when at least one section spans this source line and all such sections are covered
-func allSectionsOnLineCovered(sections []Section, line int) bool {
-	covered := false
-	for _, section := range sections {
-		if section.startLine <= line && line <= section.endLine {
-			if section.callCount == 0 {
-				return false
+		if ignore.startsLine {
+			// TODO: ideally you should be allowed to have a long comment block and then the code
+			if allSectionsOnLineCovered(sections, ignore.line+1) {
+				_, _ = fmt.Fprintf(
+					os.Stderr,
+					"go-testcov (warn): %v:%v has `// untested section` but the code below is tested\n",
+					path, ignore.line,
+				)
 			}
-			covered = true
+		} else {
+			if allSectionsOnLineCovered(sections, ignore.line) {
+				_, _ = fmt.Fprintf(
+					os.Stderr,
+					"go-testcov (warn): %v:%v has `// untested section` but is tested\n",
+					path, ignore.line,
+				)
+			}
 		}
 	}
-	return covered
 }
 
-// true when at least one section starts exactly on this line and all such sections are covered
-func allSectionsStartingAtLineCovered(sections []Section, line int) bool {
-	covered := false
+// true when all sections spanning this source line are covered (also true when none do)
+func allSectionsOnLineCovered(sections []Section, line int) bool {
+	covered := true
 	for _, section := range sections {
-		if section.startLine == line {
-			if section.callCount == 0 {
+		if section.startLine <= line && line <= section.endLine { // on that line
+			if section.callCount == 0 { // untested
 				return false
 			}
 			covered = true
