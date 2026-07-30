@@ -43,24 +43,27 @@ func runGoTestAndCheckCoverage(argv []string) (exitCode int) {
 		defer os.Remove(coveragePath)
 	}
 
-	var command []string
+	// run test
+	exitCode = runCommand(buildTestCommand(argv, coveragePath)...)
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	return checkCoverage(coveragePath)
+}
+
+// build the `go test` (or `ginkgo`) command that writes coverage to coveragePath
+func buildTestCommand(argv []string, coveragePath string) []string {
 	// user trying to use ginkgo binary, or locally installed one ?
 	if len(argv) >= 1 && strings.HasSuffix("/"+argv[0], "/ginkgo") {
 		// - files (i.e. ./...) need to come last
 		// - subcommands need to come first, see https://github.com/onsi/ginkgo/issues/1531
 		length := len(argv)
-		command = argv[0 : length-1]
-		command = append(command, "-cover", "-coverprofile", coveragePath, argv[length-1])
+		command := argv[0 : length-1]
+		return append(command, "-cover", "-coverprofile", coveragePath, argv[length-1])
 	} else {
-		command = append(append([]string{"go", "test"}, argv...), "-coverprofile", coveragePath)
+		return append(append([]string{"go", "test"}, argv...), "-coverprofile", coveragePath)
 	}
-
-	exitCode = runCommand(command...)
-
-	if exitCode != 0 {
-		return exitCode
-	}
-	return checkCoverage(coveragePath)
 }
 
 // check coverage for each path that has coverage
