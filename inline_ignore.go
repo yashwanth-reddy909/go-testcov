@@ -91,14 +91,10 @@ func warnCoveredInlineIgnore(path string, sections []Section, inlineIgnores []In
 
 // true when all sections spanning this source line are covered (also true when none do)
 func allSectionsOnLineCovered(sections []Section, line int) bool {
-	covered := true
 	for _, section := range sections {
-		if section.startLine <= line && line <= section.endLine { // on that line
-			if section.callCount == 0 { // untested
-				return false
-			}
-			covered = true
+		if section.startLine <= line && line <= section.endLine && section.callCount == 0 {
+			return false
 		}
 	}
-	return covered
+	return true
 }
