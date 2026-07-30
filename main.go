@@ -87,54 +87,69 @@ func checkCoverage(coverageFilePath string) (exitCode int) {
 		blockIgnores := findBlockIgnores(lines)
 		inlineIgnores := findInlineIgnores(lines)
 
-		// print warnings for parts that incorrectly claim to be untested
+		// print warnings for parts that incorrectly claim to be untestedSections
 		warnCoveredBlockIgnore(displayPath, sections, blockIgnores)
 		warnCoveredInlineIgnore(displayPath, sections, inlineIgnores)
 
-		// find untested sections
-		untested := untestedFromSections(sections)
-		untested = removeSectionsInBlockIgnore(untested, blockIgnores)
-		untested = removeSectionsInInlineIgnore(untested, inlineIgnores)
+		// find untestedSections sections
+		untestedSections := untestedFromSections(sections)
+		untestedSections = removeSectionsInBlockIgnore(untestedSections, blockIgnores)
+		untestedSections = removeSectionsInInlineIgnore(untestedSections, inlineIgnores)
 
-		actualUntestedCount := len(untested)
-		actualUntestedPercent := int(math.Round(float64(actualUntestedCount) / float64(len(lines)) * 100))
-
-		details := UntestedDetails{
-			actualCount:       actualUntestedCount,
-			actualPercent:     actualUntestedPercent,
-			configuredValue:   configuredUntestedValue,
-			configuredPercent: configuredUntestedPercent,
-		}.String()
-
-		if (!configuredUntestedPercent && actualUntestedCount == configuredUntestedValue) || (configuredUntestedPercent && actualUntestedPercent <= configuredUntestedValue) {
-			// either: exactly as much as we expected, ignored (0%), or <= % than configured: nothing to do
-		} else if actualUntestedCount > configuredUntestedValue {
-			printUntestedSections(untested, displayPath, details)
+		// compare config against what we found
+		untested := newUntested(len(untestedSections), len(lines), configuredUntestedValue, configuredUntestedPercent)
+		if untested.isAsConfigured() {
+			// nothing to do
+		} else if untested.isMoreThanConfigured() {
+			printUntestedSections(untestedSections, displayPath, untested.String())
 			exitCode = 1 // at least 1 failure, add more tests
-		} else { // never hit in % case
+		} else { // less than configured which does not happen when % is used
 			_, _ = fmt.Fprintf(
 				os.Stderr,
 				"%v has less untested sections %v, decrement configured untested?\nconfigured on: %v:%v",
-				displayPath, details, readPath, configuredUntestedAtLine)
+				displayPath, untested.String(), readPath, configuredUntestedAtLine)
 		}
 	})
 
 	return exitCode
 }
 
-// what to show the user for how the actual untested amount compares to what's configured
-type UntestedDetails struct {
+// compares how many sections are actually untested against what's configured
+type Untested struct {
 	actualCount       int
 	actualPercent     int
 	configuredValue   int
 	configuredPercent bool
 }
 
-func (d UntestedDetails) String() string {
-	if d.configuredPercent {
-		return fmt.Sprintf("(%v%% current vs %v%% configured)", d.actualPercent, d.configuredValue)
+func newUntested(actualCount int, totalLines int, configuredValue int, configuredPercent bool) Untested {
+	return Untested{
+		actualCount:       actualCount,
+		actualPercent:     int(math.Round(float64(actualCount) / float64(totalLines) * 100)),
+		configuredValue:   configuredValue,
+		configuredPercent: configuredPercent,
 	}
-	return fmt.Sprintf("(%v current vs %v configured)", d.actualCount, d.configuredValue)
+}
+
+// untested is exactly as much as we expected, ignored (0%), or <= % than configured: nothing to do
+func (m Untested) isAsConfigured() bool {
+	if m.configuredPercent {
+		return m.actualPercent <= m.configuredValue
+	} else {
+		return m.actualCount == m.configuredValue
+	}
+}
+
+func (m Untested) isMoreThanConfigured() bool {
+	return m.actualCount > m.configuredValue
+}
+
+func (m Untested) String() string {
+	if m.configuredPercent {
+		return fmt.Sprintf("(%v%% current vs %v%% configured)", m.actualPercent, m.configuredValue)
+	} else {
+		return fmt.Sprintf("(%v current vs %v configured)", m.actualCount, m.configuredValue)
+	}
 }
 
 func printUntestedSections(sections []Section, displayPath string, details string) {
