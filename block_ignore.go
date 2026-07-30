@@ -88,18 +88,14 @@ func warnCoveredBlockIgnore(path string, sections []Section, blockIgnores []Bloc
 	}
 }
 
-// true when at least one section is contained in the range and all such sections are covered
+// true when all sections contained in the range are covered (vacuously true when there are none)
 func allSectionsInRangeCovered(sections []Section, startLine int, endLine int) bool {
-	covered := false
 	for _, section := range sections {
-		if startLine <= section.startLine && section.endLine <= endLine {
-			if section.callCount == 0 {
-				return false
-			}
-			covered = true
+		if startLine <= section.startLine && section.endLine <= endLine && section.callCount == 0 {
+			return false
 		}
 	}
-	return covered
+	return true
 }
 
 // find the first line starting with the search term
