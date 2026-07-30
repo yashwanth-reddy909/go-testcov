@@ -88,14 +88,14 @@ func checkCoverage(coverageFilePath string) (exitCode int) {
 		lines := strings.Split(readFile(readPath), "\n")
 
 		// find ignores once, so warnings about them and their effect on coverage stay in sync
-		inlineIgnores := findInlineIgnores(lines)
 		blockIgnores := findBlockIgnores(lines)
+		inlineIgnores := findInlineIgnores(lines)
 
 		// print warnings logs for covered blocks and sections
-		warnCoveredInlineIgnore(displayPath, sections, inlineIgnores)
 		warnCoveredBlockIgnore(displayPath, sections, blockIgnores)
+		warnCoveredInlineIgnore(displayPath, sections, inlineIgnores)
 
-		untested := removeSectionsWithInlineComment(
+		untested := removeSectionsInInlineIgnore(
 			removeSectionsInBlockIgnore(untestedFromSections(sections), blockIgnores), inlineIgnores,
 		)
 		actualUntested := len(untested)
@@ -192,6 +192,13 @@ func inBlockIgnore(ignores []BlockIgnore, section Section) bool {
 	return false
 }
 
+// remove sections that are inside a `// untested block` ignore
+func removeSectionsInBlockIgnore(sections []Section, blockIgnores []BlockIgnore) []Section {
+	return filter(sections, func(section Section) bool {
+		return !inBlockIgnore(blockIgnores, section)
+	})
+}
+
 // a `// untested section` comment, either trailing on a line or on its own line above the code
 type InlineIgnore struct {
 	line       int  // line the comment is on
@@ -217,39 +224,22 @@ func findInlineIgnores(lines []string) (ignores []InlineIgnore) {
 	return
 }
 
-// true when a comment is on this exact line
-func inlineIgnoresLine(ignores []InlineIgnore, line int) bool {
+// true when the line is ignored by one of the given inline comments
+func inInlineIgnore(ignores []InlineIgnore, line int) bool {
 	for _, ignore := range ignores {
-		if ignore.line == line {
+		if ignore.line == line || (ignore.startsLine && ignore.line == line-1) {
 			return true
 		}
 	}
 	return false
-}
-
-// true when a comment on the line above ignores this line
-func inlineIgnoreStartsBefore(ignores []InlineIgnore, line int) bool {
-	for _, ignore := range ignores {
-		if ignore.startsLine && ignore.line == line-1 {
-			return true
-		}
-	}
-	return false
-}
-
-// remove sections that are inside a `// untested block` ignore
-func removeSectionsInBlockIgnore(sections []Section, blockIgnores []BlockIgnore) []Section {
-	return filter(sections, func(section Section) bool {
-		return !inBlockIgnore(blockIgnores, section)
-	})
 }
 
 // remove sections that are marked with a `// untested section` comment
 // NOTE: this is a bit rough as it does not account for partial lines via start/end characters
-func removeSectionsWithInlineComment(sections []Section, inlineIgnores []InlineIgnore) []Section {
+func removeSectionsInInlineIgnore(sections []Section, inlineIgnores []InlineIgnore) []Section {
 	return filter(sections, func(section Section) bool {
 		for lineNumber := section.startLine; lineNumber <= section.endLine; lineNumber++ {
-			if inlineIgnoresLine(inlineIgnores, lineNumber) || inlineIgnoreStartsBefore(inlineIgnores, lineNumber) {
+			if inInlineIgnore(inlineIgnores, lineNumber) {
 				return false
 			}
 		}
@@ -314,6 +304,24 @@ func untestedFromSections(sections []Section) []Section {
 	})
 }
 
+// warn when blocks are actually tested
+func warnCoveredBlockIgnore(path string, sections []Section, blockIgnores []BlockIgnore) {
+	for _, ignore := range blockIgnores {
+		// skip flaky-coverage warnings (goroutines, timing, randomness)
+		if ignore.random {
+			continue
+		}
+
+		if allSectionsInRangeCovered(sections, ignore.startLine, ignore.endLine) {
+			_, _ = fmt.Fprintf(
+				os.Stderr,
+				"go-testcov (warn): %v:%v has `// untested block` but the block is tested\n",
+				path, ignore.commentLine,
+			)
+		}
+	}
+}
+
 // warn when inline ignore markers point to code that is actually covered
 func warnCoveredInlineIgnore(path string, sections []Section, inlineIgnores []InlineIgnore) {
 	for _, ignore := range inlineIgnores {
@@ -333,24 +341,6 @@ func warnCoveredInlineIgnore(path string, sections []Section, inlineIgnores []In
 				os.Stderr,
 				"go-testcov (warn): %v:%v has `// untested section` but the code below is tested\n",
 				path, ignore.line,
-			)
-		}
-	}
-}
-
-// warn when blocks are actually tested
-func warnCoveredBlockIgnore(path string, sections []Section, blockIgnores []BlockIgnore) {
-	for _, ignore := range blockIgnores {
-		// skip flaky-coverage warnings (goroutines, timing, randomness)
-		if ignore.random {
-			continue
-		}
-
-		if allSectionsInRangeCovered(sections, ignore.startLine, ignore.endLine) {
-			_, _ = fmt.Fprintf(
-				os.Stderr,
-				"go-testcov (warn): %v:%v has `// untested block` but the block is tested\n",
-				path, ignore.commentLine,
 			)
 		}
 	}
