@@ -99,13 +99,12 @@ func checkCoverage(coverageFilePath string) (exitCode int) {
 		actualUntestedCount := len(untested)
 		actualUntestedPercent := int(math.Round(float64(actualUntestedCount) / float64(len(lines)) * 100))
 
-		// what to show the user
-		var details string
-		if configuredUntestedPercent {
-			details = fmt.Sprintf("(%v%% current vs %v%% configured)", actualUntestedPercent, configuredUntestedValue)
-		} else {
-			details = fmt.Sprintf("(%v current vs %v configured)", actualUntestedCount, configuredUntestedValue)
-		}
+		details := UntestedDetails{
+			actualCount:       actualUntestedCount,
+			actualPercent:     actualUntestedPercent,
+			configuredValue:   configuredUntestedValue,
+			configuredPercent: configuredUntestedPercent,
+		}.String()
 
 		if (!configuredUntestedPercent && actualUntestedCount == configuredUntestedValue) || (configuredUntestedPercent && actualUntestedPercent <= configuredUntestedValue) {
 			// either: exactly as much as we expected, ignored (0%), or <= % than configured: nothing to do
@@ -121,6 +120,21 @@ func checkCoverage(coverageFilePath string) (exitCode int) {
 	})
 
 	return exitCode
+}
+
+// what to show the user for how the actual untested amount compares to what's configured
+type UntestedDetails struct {
+	actualCount       int
+	actualPercent     int
+	configuredValue   int
+	configuredPercent bool
+}
+
+func (d UntestedDetails) String() string {
+	if d.configuredPercent {
+		return fmt.Sprintf("(%v%% current vs %v%% configured)", d.actualPercent, d.configuredValue)
+	}
+	return fmt.Sprintf("(%v current vs %v configured)", d.actualCount, d.configuredValue)
 }
 
 func printUntestedSections(sections []Section, displayPath string, details string) {
