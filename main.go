@@ -81,36 +81,37 @@ func checkCoverage(coverageFilePath string) (exitCode int) {
 		}
 
 		displayPath, readPath := normalizeCoveredPath(path, wd)
-		configuredUntested, percentUntested, configuredUntestedAtLine := configuredUntestedForFile(readPath)
+		configuredUntestedValue, configuredUntestedPercent, configuredUntestedAtLine := configuredUntestedForFile(readPath)
 		lines := strings.Split(readFile(readPath), "\n")
 
-		// find ignores once, so warnings about them and their effect on coverage stay in sync
 		blockIgnores := findBlockIgnores(lines)
 		inlineIgnores := findInlineIgnores(lines)
 
-		// print warnings logs for covered blocks and sections
+		// print warnings for parts that incorrectly claim to be untested
 		warnCoveredBlockIgnore(displayPath, sections, blockIgnores)
 		warnCoveredInlineIgnore(displayPath, sections, inlineIgnores)
 
-		untested := removeSectionsInInlineIgnore(
-			removeSectionsInBlockIgnore(untestedFromSections(sections), blockIgnores), inlineIgnores,
-		)
-		actualUntested := len(untested)
-		actualUntestedPercent := int(math.Round(float64(actualUntested) / float64(len(lines)) * 100))
+		// find untested sections
+		untested := untestedFromSections(sections)
+		untested = removeSectionsInBlockIgnore(untested, blockIgnores)
+		untested = removeSectionsInInlineIgnore(untested, inlineIgnores)
+
+		actualUntestedCount := len(untested)
+		actualUntestedPercent := int(math.Round(float64(actualUntestedCount) / float64(len(lines)) * 100))
 
 		// what to show the user
 		var details string
-		if percentUntested {
-			details = fmt.Sprintf("(%v%% current vs %v%% configured)", actualUntestedPercent, configuredUntested)
+		if configuredUntestedPercent {
+			details = fmt.Sprintf("(%v%% current vs %v%% configured)", actualUntestedPercent, configuredUntestedValue)
 		} else {
-			details = fmt.Sprintf("(%v current vs %v configured)", actualUntested, configuredUntested)
+			details = fmt.Sprintf("(%v current vs %v configured)", actualUntestedCount, configuredUntestedValue)
 		}
 
-		if (!percentUntested && actualUntested == configuredUntested) || (percentUntested && actualUntestedPercent <= configuredUntested) {
-			// exactly as much as we expected, ignored (0%), or <= % than configured: nothing to do
-		} else if actualUntested > configuredUntested {
+		if (!configuredUntestedPercent && actualUntestedCount == configuredUntestedValue) || (configuredUntestedPercent && actualUntestedPercent <= configuredUntestedValue) {
+			// either: exactly as much as we expected, ignored (0%), or <= % than configured: nothing to do
+		} else if actualUntestedCount > configuredUntestedValue {
 			printUntestedSections(untested, displayPath, details)
-			exitCode = 1 // at least 1 failure, so say to add more tests
+			exitCode = 1 // at least 1 failure, add more tests
 		} else { // never hit in % case
 			_, _ = fmt.Fprintf(
 				os.Stderr,
