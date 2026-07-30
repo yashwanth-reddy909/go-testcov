@@ -316,6 +316,22 @@ var _ = Describe("go-testcov", func() {
 			})
 		})
 
+		It("fails when configured untested % is below actual untested even if the raw count is low", func() {
+			withFakeGo("echo header > coverage.out; echo foo:1.2,1.3 0 >> coverage.out", func() {
+				withFakeGoPath(func(goPath string) {
+					writeFile(joinPath(goPath, "src", "foo"), "// untested sections: 10%\n")
+					expectCommand(
+						runGoTestWithCoverage,
+						[]interface{}{
+							1,
+							"",
+							"foo new untested sections introduced (50% current vs 10% configured)\nfoo:1.2,1.3\n",
+						},
+					)
+				})
+			})
+		})
+
 		It("passes when configured untested % is above actual untested", func() {
 			withFakeGo("echo header > coverage.out; echo foo:1.2,1.3 0 >> coverage.out; echo foo:2.2,2.3 0 >> coverage.out", func() {
 				withFakeGoPath(func(goPath string) {

@@ -141,7 +141,11 @@ func (m Untested) isAsConfigured() bool {
 }
 
 func (m Untested) isMoreThanConfigured() bool {
-	return m.actualCount > m.configuredValue
+	if m.configuredPercent {
+		return m.actualPercent > m.configuredValue
+	} else {
+		return m.actualCount > m.configuredValue
+	}
 }
 
 func (m Untested) String() string {
