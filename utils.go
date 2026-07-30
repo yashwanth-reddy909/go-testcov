@@ -86,3 +86,14 @@ func lineNumberOfMatch(content string) int {
 	index := perFileIgnore.FindStringIndex(content)[0]
 	return strings.Count(content[0:index], "\n") + 1
 }
+
+// keep only the items for which keep returns true
+func filter[T any](items []T, keep func(T) bool) []T {
+	kept := []T{}
+	for _, item := range items {
+		if keep(item) {
+			kept = append(kept, item)
+		}
+	}
+	return kept
+}

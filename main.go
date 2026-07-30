@@ -2,30 +2,20 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"os"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 )
 
 const version = "v1.15.0"
 
-// reused regex
-var inlineIgnore = "//.*untested section(\\s|:|,|$)"
-var anyInlineIgnore = regexp.MustCompile(inlineIgnore)
-var startsWithInlineIgnore = regexp.MustCompile("^\\s*" + inlineIgnore)
-var randomInlineIgnore = regexp.MustCompile(`//.*untested section\s+random(\s|:|,|$)`)
-var blockIgnore = regexp.MustCompile("(?m)^([\t ]*)// *untested block(\\s|:|,|$)")
-var randomBlockIgnore = regexp.MustCompile(`// *untested block\s+random(\s|:|,|$)`)
-var perFileIgnore = regexp.MustCompile("// *untested sections: *(\\S+)")
 var generatedFile = regexp.MustCompile("/*generated.*\\.go$")
 
 // test injection point to enable test coverage of exit behavior
 var exitFunction = os.Exit
 
-// delegate to runGoTestAndCheckCoverage, so we have an easy to test method
+// delegates to runGoTestAndCheckCoverage, so we have an easy to test method
 func main() {
 	argv := os.Args[1:len(os.Args)] // remove go-testcov
 
@@ -49,24 +39,27 @@ func runGoTestAndCheckCoverage(argv []string) (exitCode int) {
 		defer os.Remove(coveragePath)
 	}
 
-	var command []string
+	// run test
+	exitCode = runCommand(buildTestCommand(argv, coveragePath)...)
+	if exitCode != 0 {
+		return exitCode
+	}
+
+	return checkCoverage(coveragePath)
+}
+
+// build the `go test` (or `ginkgo`) command that writes coverage to coveragePath
+func buildTestCommand(argv []string, coveragePath string) []string {
 	// user trying to use ginkgo binary, or locally installed one ?
 	if len(argv) >= 1 && strings.HasSuffix("/"+argv[0], "/ginkgo") {
 		// - files (i.e. ./...) need to come last
 		// - subcommands need to come first, see https://github.com/onsi/ginkgo/issues/1531
 		length := len(argv)
-		command = argv[0 : length-1]
-		command = append(command, "-cover", "-coverprofile", coveragePath, argv[length-1])
+		command := argv[0 : length-1]
+		return append(command, "-cover", "-coverprofile", coveragePath, argv[length-1])
 	} else {
-		command = append(append([]string{"go", "test"}, argv...), "-coverprofile", coveragePath)
+		return append(append([]string{"go", "test"}, argv...), "-coverprofile", coveragePath)
 	}
-
-	exitCode = runCommand(command...)
-
-	if exitCode != 0 {
-		return exitCode
-	}
-	return checkCoverage(coveragePath)
 }
 
 // check coverage for each path that has coverage
@@ -84,129 +77,37 @@ func checkCoverage(coverageFilePath string) (exitCode int) {
 		}
 
 		displayPath, readPath := normalizeCoveredPath(path, wd)
-		configuredUntested, percentUntested, configuredUntestedAtLine := configuredUntestedForFile(readPath)
+		configuredUntestedValue, configuredUntestedPercent, configuredUntestedAtLine := configuredUntestedForFile(readPath)
 		lines := strings.Split(readFile(readPath), "\n")
 
-		// print warnings logs for covered blocks and sections
-		warnCoveredIgnores(displayPath, sections, lines)
+		blockIgnores := findBlockIgnores(lines)
+		inlineIgnores := findInlineIgnores(lines)
 
-		untested := removeSectionsMarkedWithInlineComment(untestedFromSections(sections), lines)
-		actualUntested := len(untested)
-		actualUntestedPercent := int(math.Round(float64(actualUntested) / float64(len(lines)) * 100))
+		// print warnings for parts that incorrectly claim to be untestedSections
+		warnCoveredBlockIgnore(displayPath, sections, blockIgnores)
+		warnCoveredInlineIgnore(displayPath, sections, inlineIgnores)
 
-		// what to show the user
-		var details string
-		if percentUntested {
-			details = fmt.Sprintf("(%v%% current vs %v%% configured)", actualUntestedPercent, configuredUntested)
-		} else {
-			details = fmt.Sprintf("(%v current vs %v configured)", actualUntested, configuredUntested)
-		}
+		// find untestedSections sections
+		untestedSections := filter(sections, func(section Section) bool { return section.callCount == 0 })
+		untestedSections = removeSectionsInBlockIgnore(untestedSections, blockIgnores)
+		untestedSections = removeSectionsInInlineIgnore(untestedSections, inlineIgnores)
 
-		if (!percentUntested && actualUntested == configuredUntested) || (percentUntested && actualUntestedPercent <= configuredUntested) {
-			// exactly as much as we expected, ignored (0%), or <= % than configured: nothing to do
-		} else if actualUntested > configuredUntested {
-			printUntestedSections(untested, displayPath, details)
-			exitCode = 1 // at least 1 failure, so say to add more tests
-		} else { // never hit in % case
+		// compare config against what we found
+		untested := newUntested(len(untestedSections), len(lines), configuredUntestedValue, configuredUntestedPercent)
+		if untested.isAsConfigured() {
+			// nothing to do
+		} else if untested.isMoreThanConfigured() {
+			printUntestedSections(untestedSections, displayPath, untested.String())
+			exitCode = 1 // at least 1 failure, add more tests
+		} else { // less than configured which does not happen when % is used
 			_, _ = fmt.Fprintf(
 				os.Stderr,
 				"%v has less untested sections %v, decrement configured untested?\nconfigured on: %v:%v",
-				displayPath, details, readPath, configuredUntestedAtLine)
+				displayPath, untested.String(), readPath, configuredUntestedAtLine)
 		}
 	})
 
 	return exitCode
-}
-
-func printUntestedSections(sections []Section, displayPath string, details string) {
-	// TODO: color when tty
-	_, _ = fmt.Fprintf(os.Stderr, "%v new untested sections introduced %v\n", displayPath, details)
-
-	// sort sections since go coverage output is not sorted
-	sort.Slice(sections, func(i, j int) bool {
-		return sections[i].sortValue < sections[j].sortValue
-	})
-
-	// print copy-paste friendly snippets
-	for _, section := range sections {
-		_, _ = fmt.Fprintln(os.Stderr, displayPath+":"+section.Location())
-	}
-}
-
-// keep untested sections that are marked with "untested section" comment
-// need to be careful to not change the list while iterating, see https://pauladamsmith.com/blog/2016/07/go-modify-slice-iteration.html
-// NOTE: this is a bit rough as it does not account for partial lines via start/end characters
-func removeSectionsMarkedWithInlineComment(sections []Section, lines []string) []Section {
-	uncheckedSections := sections
-	sections = []Section{}
-	ignoredBlockEndLine := -1
-
-	for i, section := range uncheckedSections {
-		// if we are still in an ignored block then just keep skipping
-		if section.endLine <= ignoredBlockEndLine {
-			continue
-		}
-
-		// starts a new ignore block, then skip
-		if ignoredBlockEndLine = findNextIgnoreBlock(uncheckedSections, i, lines); ignoredBlockEndLine != -1 {
-			continue
-		}
-
-		// same inline-ignore rules as warnCoveredInlineIgnore, keep the two in sync
-		for lineNumber := section.startLine; lineNumber <= section.endLine; lineNumber++ {
-			if anyInlineIgnore.MatchString(lines[lineNumber-1]) {
-				break // section is ignored
-			} else if lineNumber >= 2 && startsWithInlineIgnore.MatchString(lines[lineNumber-2]) {
-				break // section is ignored by inline ignore above it
-			} else if lineNumber == section.endLine {
-				sections = append(sections, section) // keep the section
-			}
-		}
-	}
-	return sections
-}
-
-// search the codeless section (comments) for a block ignore
-// and if found start a new ignore block
-func findNextIgnoreBlock(sections []Section, current int, lines []string) (ignoreBlockEndLine int) {
-	prevEndLine := 1
-	if current != 0 {
-		prevEndLine = sections[current-1].endLine
-	}
-
-	currentStartLine := sections[current].startLine
-	codeless := strings.Join(lines[prevEndLine-1:currentStartLine-1], "\n")
-
-	// was there an ignore start ?
-	match := blockIgnore.FindStringSubmatch(codeless)
-	if match == nil {
-		return -1
-	}
-
-	// ... then return where it ends
-	whitespace := match[1]
-	search := whitespace + "}"
-	if endIndex := findLineStartingWith(lines, currentStartLine-1, search); endIndex != -1 {
-		return endIndex + 1
-	}
-
-	_, _ = fmt.Fprintf(
-		os.Stderr,
-		"go-testcov: unable to find the end of the `// untested block` started between %d and %d, a line starting with %v",
-		prevEndLine, currentStartLine, search,
-	)
-	return -1
-}
-
-// find the first line starting with the search term
-// returns -1 when not found
-func findLineStartingWith(lines []string, searchFromIndex int, search string) int {
-	for i, line := range lines[searchFromIndex:] {
-		if strings.HasPrefix(line, search) {
-			return searchFromIndex + i
-		}
-	}
-	return -1
 }
 
 func groupSectionsByPath(sections []Section) (grouped map[string][]Section) {
@@ -235,119 +136,6 @@ func getSections(coverageFilePath string) (sections []Section) {
 	}
 
 	return
-}
-
-// keep only sections that were not covered (callCount == 0)
-func untestedFromSections(sections []Section) (untested []Section) {
-	untested = []Section{}
-	for _, section := range sections {
-		if section.callCount == 0 {
-			untested = append(untested, section)
-		}
-	}
-	return
-}
-
-// warn when sections/blocks are actually tested
-func warnCoveredIgnores(path string, sections []Section, lines []string) {
-	warnCoveredInlineIgnore(path, sections, lines)
-	warnCoveredBlockIgnore(path, sections, lines)
-}
-
-// warn when inline ignore markers point to code that is actually covered
-func warnCoveredInlineIgnore(path string, sections []Section, lines []string) {
-	for i, line := range lines {
-		sourceLine := i + 1
-
-		// skip flaky-coverage warnings (goroutines, timing, randomness)
-		if randomInlineIgnore.MatchString(line) {
-			continue
-		}
-
-		// same inline-ignore rules as removeSectionsMarkedWithInlineComment, keep the two in sync
-		if anyInlineIgnore.MatchString(line) && allSectionsOnLineCovered(sections, sourceLine) {
-			_, _ = fmt.Fprintf(
-				os.Stderr,
-				"go-testcov (warn): %v:%v has `// untested section` but is tested\n",
-				path, sourceLine,
-			)
-		} else if startsWithInlineIgnore.MatchString(line) && allSectionsStartingAtLineCovered(sections, sourceLine+1) {
-			_, _ = fmt.Fprintf(
-				os.Stderr,
-				"go-testcov (warn): %v:%v has `// untested section` but the code below is tested\n",
-				path, sourceLine,
-			)
-		}
-	}
-}
-
-// warn when blocks are actually tested
-func warnCoveredBlockIgnore(path string, sections []Section, lines []string) {
-	for i, line := range lines {
-		sourceLine := i + 1
-
-		match := blockIgnore.FindStringSubmatch(line)
-		if match == nil {
-			continue
-		}
-
-		// skip flaky-coverage warnings (goroutines, timing, randomness)
-		if randomBlockIgnore.MatchString(line) {
-			continue
-		}
-
-		search := match[1] + "}"
-		endIndex := findLineStartingWith(lines, i+1, search)
-		if endIndex != -1 && allSectionsInRangeCovered(sections, sourceLine+1, endIndex+1) {
-			_, _ = fmt.Fprintf(
-				os.Stderr,
-				"go-testcov (warn): %v:%v has `// untested block` but the block is tested\n",
-				path, sourceLine,
-			)
-		}
-	}
-}
-
-// true when at least one section is contained in the range and all such sections are covered
-func allSectionsInRangeCovered(sections []Section, startLine int, endLine int) bool {
-	covered := false
-	for _, section := range sections {
-		if startLine <= section.startLine && section.endLine <= endLine {
-			if section.callCount == 0 {
-				return false
-			}
-			covered = true
-		}
-	}
-	return covered
-}
-
-// true when at least one section spans this source line and all such sections are covered
-func allSectionsOnLineCovered(sections []Section, line int) bool {
-	covered := false
-	for _, section := range sections {
-		if section.startLine <= line && line <= section.endLine {
-			if section.callCount == 0 {
-				return false
-			}
-			covered = true
-		}
-	}
-	return covered
-}
-
-// true when at least one section starts exactly on this line and all such sections are covered
-func allSectionsStartingAtLineCovered(sections []Section, line int) bool {
-	covered := false
-	for _, section := range sections {
-		if section.startLine == line {
-			if section.callCount == 0 {
-				return false
-			}
-			covered = true
-		}
-	}
-	return covered
 }
 
 // find relative path of file in current directory
@@ -402,31 +190,4 @@ func normalizeCoveredPath(path string, workingDirectory string) (displayPath str
 
 	// testing remote package, don't expand display but expand full goPath
 	return path, goPrefixedPath
-}
-
-// How many sections are expected to be untested ?
-//
-// - 0 if not configured
-// - count when configured with "x"
-// - percentage when configured with "x%"
-// - 100% if "ignore"
-//
-// also returns at what line we found the comment, so we can point the user to it
-func configuredUntestedForFile(path string) (count int, percent bool, lineNumber int) {
-	content := readFile(path)
-	match := perFileIgnore.FindStringSubmatch(content)
-	if len(match) == 2 { // found a config ?
-		config := match[1]
-		line := lineNumberOfMatch(content)
-
-		if config == "ignore" {
-			return 100, true, line // 100% which does not warn for any amount, so basically ignored
-		} else if strings.HasSuffix(config, "%") {
-			return stringToInt(config[:len(config)-1]), true, line // percent
-		} else {
-			return stringToInt(config), false, line // count
-		}
-	} else {
-		return 0, false, 0
-	}
 }

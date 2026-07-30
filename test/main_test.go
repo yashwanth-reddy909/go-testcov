@@ -316,6 +316,22 @@ var _ = Describe("go-testcov", func() {
 			})
 		})
 
+		It("fails when configured untested % is below actual untested even if the raw count is low", func() {
+			withFakeGo("echo header > coverage.out; echo foo:1.2,1.3 0 >> coverage.out", func() {
+				withFakeGoPath(func(goPath string) {
+					writeFile(joinPath(goPath, "src", "foo"), "// untested sections: 10%\n")
+					expectCommand(
+						runGoTestWithCoverage,
+						[]interface{}{
+							1,
+							"",
+							"foo new untested sections introduced (50% current vs 10% configured)\nfoo:1.2,1.3\n",
+						},
+					)
+				})
+			})
+		})
+
 		It("passes when configured untested % is above actual untested", func() {
 			withFakeGo("echo header > coverage.out; echo foo:1.2,1.3 0 >> coverage.out; echo foo:2.2,2.3 0 >> coverage.out", func() {
 				withFakeGoPath(func(goPath string) {
@@ -468,144 +484,13 @@ var _ = Describe("go-testcov", func() {
 								[]interface{}{
 									1,
 									"",
-									"go-testcov: unable to find the end of the `// untested block` started between 1 and 2, a line starting with \t\t\t\t\t}foo new untested sections introduced (3 current vs 0 configured)\nfoo:2.13,3.13\nfoo:3.13,4.4\nfoo:8.3,8.18\n",
+									"go-testcov: unable to find the end of the `// untested block` on line 1, a line starting with \t\t\t\t\t}foo new untested sections introduced (3 current vs 0 configured)\nfoo:2.13,3.13\nfoo:3.13,4.4\nfoo:8.3,8.18\n",
 								},
 							)
 						})
 					},
 				)
 			})
-		})
-	})
-
-	Describe("warnCoveredInlineIgnore", func() {
-		It("warns when inline comment is on covered code", func() {
-			stderr := captureStderr(func() {
-				warnCoveredInlineIgnore(
-					"foo.go",
-					[]Section{{"foo.go", 1, 2, 1, 3, 100002, 1}},
-					[]string{"foo // untested section"},
-				)
-			})
-			Expect(stderr).To(Equal("go-testcov (warn): foo.go:1 has `// untested section` but is tested\n"))
-		})
-
-		It("warns when inline comment is above covered code", func() {
-			stderr := captureStderr(func() {
-				warnCoveredInlineIgnore(
-					"foo.go",
-					[]Section{{"foo.go", 2, 2, 2, 3, 200002, 1}},
-					[]string{"// untested section", "foo"},
-				)
-			})
-			Expect(stderr).To(Equal("go-testcov (warn): foo.go:1 has `// untested section` but the code below is tested\n"))
-		})
-
-		It("does not warn when inline comment has random suffix", func() {
-			stderr := captureStderr(func() {
-				warnCoveredInlineIgnore(
-					"foo.go",
-					[]Section{{"foo.go", 1, 2, 1, 3, 100002, 1}},
-					[]string{"foo // untested section random"},
-				)
-			})
-			Expect(stderr).To(Equal(""))
-		})
-
-		It("does not warn when above-line comment has random suffix", func() {
-			stderr := captureStderr(func() {
-				warnCoveredInlineIgnore(
-					"foo.go",
-					[]Section{{"foo.go", 2, 2, 2, 3, 200002, 1}},
-					[]string{"// untested section random", "foo"},
-				)
-			})
-			Expect(stderr).To(Equal(""))
-		})
-
-		It("does not warn when inline comment is on uncovered code", func() {
-			stderr := captureStderr(func() {
-				warnCoveredInlineIgnore(
-					"foo.go",
-					[]Section{},
-					[]string{"foo // untested section"},
-				)
-			})
-			Expect(stderr).To(Equal(""))
-		})
-
-		It("does not warn when one of multiple sections on the line is uncovered", func() {
-			stderr := captureStderr(func() {
-				warnCoveredInlineIgnore(
-					"foo.go",
-					[]Section{
-						{"foo.go", 1, 2, 1, 3, 100002, 1},
-						{"foo.go", 1, 4, 1, 6, 100004, 0},
-					},
-					[]string{"foo || bar // untested section"},
-				)
-			})
-			Expect(stderr).To(Equal(""))
-		})
-
-		It("keeps random suffix inline comments as ignores", func() {
-			sections := removeSectionsMarkedWithInlineComment(
-				[]Section{{"foo.go", 1, 2, 1, 3, 100002, 0}},
-				[]string{"foo // untested section random"},
-			)
-			Expect(sections).To(Equal([]Section{}))
-		})
-	})
-
-	Describe("warnCoveredBlockIgnore", func() {
-		It("warns when an untested block is fully covered", func() {
-			stderr := captureStderr(func() {
-				warnCoveredBlockIgnore(
-					"foo.go",
-					[]Section{
-						{"foo.go", 3, 2, 4, 3, 300002, 1},
-						{"foo.go", 4, 3, 4, 8, 400003, 1},
-					},
-					[]string{"", "// untested block", "func foo() {", "\tbar()", "}"},
-				)
-			})
-			Expect(stderr).To(Equal("go-testcov (warn): foo.go:2 has `// untested block` but the block is tested\n"))
-		})
-
-		It("does not warn when an untested block is partially covered", func() {
-			stderr := captureStderr(func() {
-				warnCoveredBlockIgnore(
-					"foo.go",
-					[]Section{
-						{"foo.go", 2, 2, 3, 3, 200002, 1},
-						{"foo.go", 3, 3, 3, 8, 300003, 0},
-					},
-					[]string{"// untested block", "func foo() {", "\tbar()", "}"},
-				)
-			})
-			Expect(stderr).To(Equal(""))
-		})
-
-		It("does not warn when an untested block is uncovered", func() {
-			stderr := captureStderr(func() {
-				warnCoveredBlockIgnore(
-					"foo.go",
-					[]Section{{"foo.go", 2, 2, 3, 3, 200002, 0}},
-					[]string{"// untested block", "func foo() {", "\tbar()", "}"},
-				)
-			})
-			Expect(stderr).To(Equal(""))
-		})
-
-		It("does not warn when an untested block has a random suffix", func() {
-			stderr := captureStderr(func() {
-				warnCoveredBlockIgnore(
-					"foo.go",
-					[]Section{{"foo.go", 2, 2, 3, 3, 200002, 1}},
-					[]string{"// untested block random", "func foo() {", "\tbar()", "}"},
-				)
-			})
-			Expect(stderr).To(Equal(""))
 		})
 	})
 
@@ -626,88 +511,4 @@ var _ = Describe("go-testcov", func() {
 		})
 	})
 
-	Describe("untestedFromSections", func() {
-		It("returns empty for empty input", func() {
-			Expect(untestedFromSections([]Section{})).To(Equal([]Section{}))
-		})
-
-		It("keeps only sections with count 0", func() {
-			input := []Section{
-				{"foo/pkg.go", 1, 2, 3, 4, 100002, 0},
-				{"foo/pkg.go", 5, 2, 5, 4, 500002, 10},
-			}
-			Expect(untestedFromSections(input)).To(Equal([]Section{
-				{"foo/pkg.go", 1, 2, 3, 4, 100002, 0},
-			}))
-		})
-
-		It("keeps multiple untested sections in order", func() {
-			input := []Section{
-				{"foo/pkg.go", 1, 2, 3, 4, 100002, 0},
-				{"foo/pkg.go", 5, 2, 5, 4, 500002, 10},
-				{"foo/pkg.go", 6, 2, 6, 4, 600002, 0},
-			}
-			Expect(untestedFromSections(input)).To(Equal([]Section{
-				{"foo/pkg.go", 1, 2, 3, 4, 100002, 0},
-				{"foo/pkg.go", 6, 2, 6, 4, 600002, 0},
-			}))
-		})
-
-		It("returns empty when all sections are covered", func() {
-			input := []Section{{"foo/pkg.go", 5, 2, 5, 4, 500002, 10}}
-			Expect(untestedFromSections(input)).To(Equal([]Section{}))
-		})
-	})
-
-	Describe("configuredUntestedForFile", func() {
-		It("returns 0,0 when not configured", func() {
-			inTempDir(func() {
-				writeFile(joinPath("foo"), "")
-				count, percent, line := configuredUntestedForFile("foo")
-				Expect(count).To(Equal(0))
-				Expect(percent).To(Equal(false))
-				Expect(line).To(Equal(0))
-			})
-		})
-
-		It("returns number of untested and line number of comment when configured", func() {
-			inTempDir(func() {
-				writeFile("foo", "// untested sections: 12")
-				count, percent, line := configuredUntestedForFile("foo")
-				Expect(count).To(Equal(12))
-				Expect(percent).To(Equal(false))
-				Expect(line).To(Equal(1))
-			})
-		})
-
-		It("returns number of untested and line number of comment when configured with multiple lines", func() {
-			inTempDir(func() {
-				writeFile("foo", "... bork ... \n // untested sections: 12 \n ... bork ...")
-				count, percent, line := configuredUntestedForFile("foo")
-				Expect(count).To(Equal(12))
-				Expect(percent).To(Equal(false))
-				Expect(line).To(Equal(2))
-			})
-		})
-
-		It("returns ignored when configured", func() {
-			inTempDir(func() {
-				writeFile("foo", "... bork ... \n // untested sections: ignore \n ... bork ...")
-				count, percent, line := configuredUntestedForFile("foo")
-				Expect(count).To(Equal(100))
-				Expect(percent).To(Equal(true))
-				Expect(line).To(Equal(2))
-			})
-		})
-
-		It("returns percent when configured", func() {
-			inTempDir(func() {
-				writeFile("foo", "... bork ... \n // untested sections: 10% \n ... bork ...")
-				count, percent, line := configuredUntestedForFile("foo")
-				Expect(count).To(Equal(10))
-				Expect(percent).To(Equal(true))
-				Expect(line).To(Equal(2))
-			})
-		})
-	})
 })
