@@ -45,10 +45,10 @@ var _ = Describe("block ignore", func() {
 		})
 	})
 
-	Describe("warnCoveredBlockIgnore", func() {
+	Describe("warnOnTestedBlockIgnore", func() {
 		It("warns when an untested block is fully covered", func() {
 			stderr := captureStderr(func() {
-				warnCoveredBlockIgnore(
+				warnOnTestedBlockIgnore(
 					"foo.go",
 					[]Section{
 						{"foo.go", 3, 2, 4, 3, 300002, 1},
@@ -62,7 +62,7 @@ var _ = Describe("block ignore", func() {
 
 		It("does not warn when an untested block is partially covered", func() {
 			stderr := captureStderr(func() {
-				warnCoveredBlockIgnore(
+				warnOnTestedBlockIgnore(
 					"foo.go",
 					[]Section{
 						{"foo.go", 2, 2, 3, 3, 200002, 1},
@@ -76,7 +76,7 @@ var _ = Describe("block ignore", func() {
 
 		It("does not warn when an untested block is uncovered", func() {
 			stderr := captureStderr(func() {
-				warnCoveredBlockIgnore(
+				warnOnTestedBlockIgnore(
 					"foo.go",
 					[]Section{{"foo.go", 2, 2, 3, 3, 200002, 0}},
 					findBlockIgnores([]string{"// untested block", "func foo() {", "\tbar()", "}"}),
@@ -87,7 +87,7 @@ var _ = Describe("block ignore", func() {
 
 		It("does not warn when an untested block has a random suffix", func() {
 			stderr := captureStderr(func() {
-				warnCoveredBlockIgnore(
+				warnOnTestedBlockIgnore(
 					"foo.go",
 					[]Section{{"foo.go", 2, 2, 3, 3, 200002, 1}},
 					findBlockIgnores([]string{"// untested block random", "func foo() {", "\tbar()", "}"}),

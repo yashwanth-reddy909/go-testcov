@@ -49,7 +49,7 @@ func inInlineIgnore(ignores []InlineIgnore, line int) bool {
 
 // remove sections that are marked with a `// untested section` comment
 // NOTE: this is a bit rough as it does not account for partial lines via start/end characters
-func removeSectionsInInlineIgnore(sections []Section, inlineIgnores []InlineIgnore) []Section {
+func withoutSectionsInInlineIgnore(sections []Section, inlineIgnores []InlineIgnore) []Section {
 	return filter(sections, func(section Section) bool {
 		for lineNumber := section.startLine; lineNumber <= section.endLine; lineNumber++ {
 			if inInlineIgnore(inlineIgnores, lineNumber) {
@@ -70,7 +70,7 @@ func warnCoveredInlineIgnore(path string, sections []Section, inlineIgnores []In
 
 		if ignore.startsLine {
 			// TODO: ideally you should be allowed to have a long comment block and then the code
-			if allSectionsInRangeCovered(sections, ignore.line+1, ignore.line+1) {
+			if allSectionsInRangeTested(sections, ignore.line+1, ignore.line+1) {
 				_, _ = fmt.Fprintf(
 					os.Stderr,
 					"go-testcov (warn): %v:%v has `// untested section` but the code below is tested\n",
@@ -78,7 +78,7 @@ func warnCoveredInlineIgnore(path string, sections []Section, inlineIgnores []In
 				)
 			}
 		} else {
-			if allSectionsInRangeCovered(sections, ignore.line, ignore.line) {
+			if allSectionsInRangeTested(sections, ignore.line, ignore.line) {
 				_, _ = fmt.Fprintf(
 					os.Stderr,
 					"go-testcov (warn): %v:%v has `// untested section` but is tested\n",

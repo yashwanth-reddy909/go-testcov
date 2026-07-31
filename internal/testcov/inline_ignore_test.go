@@ -125,7 +125,7 @@ var _ = Describe("inline ignore", func() {
 		})
 
 		It("keeps random suffix inline comments as ignores", func() {
-			sections := removeSectionsInInlineIgnore(
+			sections := withoutSectionsInInlineIgnore(
 				[]Section{{"foo.go", 1, 2, 1, 3, 100002, 0}},
 				findInlineIgnores([]string{"foo // untested section random"}),
 			)

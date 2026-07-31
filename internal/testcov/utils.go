@@ -87,7 +87,7 @@ func lineNumberOfMatch(content string) int {
 	return strings.Count(content[0:index], "\n") + 1
 }
 
-func allSectionsInRangeCovered(sections []Section, startLine int, endLine int) bool {
+func allSectionsInRangeTested(sections []Section, startLine int, endLine int) bool {
 	for _, section := range sections {
 		if section.startLine <= endLine && section.endLine >= startLine && section.callCount == 0 {
 			return false

@@ -31,13 +31,13 @@ func CheckCoverage(coverageFilePath string) (exitCode int) {
 		inlineIgnores := findInlineIgnores(lines)
 
 		// print warnings for parts that incorrectly claim to be untestedSections
-		warnCoveredBlockIgnore(displayPath, sections, blockIgnores)
+		warnOnTestedBlockIgnore(displayPath, sections, blockIgnores)
 		warnCoveredInlineIgnore(displayPath, sections, inlineIgnores)
 
 		// find untestedSections sections
 		untestedSections := filter(sections, func(section Section) bool { return section.callCount == 0 })
-		untestedSections = removeSectionsInBlockIgnore(untestedSections, blockIgnores)
-		untestedSections = removeSectionsInInlineIgnore(untestedSections, inlineIgnores)
+		untestedSections = withoutSectionsInBlockIgnore(untestedSections, blockIgnores)
+		untestedSections = withoutSectionsInInlineIgnore(untestedSections, inlineIgnores)
 
 		// compare config against what we found
 		untested := newUntested(len(untestedSections), len(lines), configuredUntestedValue, configuredUntestedPercent)

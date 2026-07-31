@@ -57,8 +57,7 @@ func findBlockIgnores(lines []string) (ignores []BlockIgnore) {
 	return
 }
 
-// remove sections that are inside a `// untested block` ignore
-func removeSectionsInBlockIgnore(sections []Section, blockIgnores []BlockIgnore) []Section {
+func withoutSectionsInBlockIgnore(sections []Section, blockIgnores []BlockIgnore) []Section {
 	return filter(sections, func(section Section) bool {
 		return !anyMatch(blockIgnores, func(ignore BlockIgnore) bool {
 			return ignore.ignores(section)
@@ -66,15 +65,14 @@ func removeSectionsInBlockIgnore(sections []Section, blockIgnores []BlockIgnore)
 	})
 }
 
-// warn when blocks are actually tested
-func warnCoveredBlockIgnore(path string, sections []Section, blockIgnores []BlockIgnore) {
+func warnOnTestedBlockIgnore(path string, sections []Section, blockIgnores []BlockIgnore) {
 	for _, ignore := range blockIgnores {
 		// skip flaky-coverage warnings (goroutines, timing, randomness)
 		if ignore.random {
 			continue
 		}
 
-		if allSectionsInRangeCovered(sections, ignore.startLine, ignore.endLine) {
+		if allSectionsInRangeTested(sections, ignore.startLine, ignore.endLine) {
 			_, _ = fmt.Fprintf(
 				os.Stderr,
 				"go-testcov (warn): %v:%v has `// untested block` but the block is tested\n",
