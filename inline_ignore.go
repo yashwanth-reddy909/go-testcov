@@ -70,7 +70,7 @@ func warnCoveredInlineIgnore(path string, sections []Section, inlineIgnores []In
 
 		if ignore.startsLine {
 			// TODO: ideally you should be allowed to have a long comment block and then the code
-			if allSectionsOnLineCovered(sections, ignore.line+1) {
+			if allSectionsInRangeCovered(sections, ignore.line+1, ignore.line+1) {
 				_, _ = fmt.Fprintf(
 					os.Stderr,
 					"go-testcov (warn): %v:%v has `// untested section` but the code below is tested\n",
@@ -78,7 +78,7 @@ func warnCoveredInlineIgnore(path string, sections []Section, inlineIgnores []In
 				)
 			}
 		} else {
-			if allSectionsOnLineCovered(sections, ignore.line) {
+			if allSectionsInRangeCovered(sections, ignore.line, ignore.line) {
 				_, _ = fmt.Fprintf(
 					os.Stderr,
 					"go-testcov (warn): %v:%v has `// untested section` but is tested\n",
@@ -87,14 +87,4 @@ func warnCoveredInlineIgnore(path string, sections []Section, inlineIgnores []In
 			}
 		}
 	}
-}
-
-// true when all sections spanning this source line are covered (also true when none do)
-func allSectionsOnLineCovered(sections []Section, line int) bool {
-	for _, section := range sections {
-		if section.startLine <= line && line <= section.endLine && section.callCount == 0 {
-			return false
-		}
-	}
-	return true
 }

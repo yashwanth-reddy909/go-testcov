@@ -87,6 +87,15 @@ func lineNumberOfMatch(content string) int {
 	return strings.Count(content[0:index], "\n") + 1
 }
 
+func allSectionsInRangeCovered(sections []Section, startLine int, endLine int) bool {
+	for _, section := range sections {
+		if section.startLine <= endLine && section.endLine >= startLine && section.callCount == 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // keep only the items for which keep returns true
 func filter[T any](items []T, keep func(T) bool) []T {
 	kept := []T{}
