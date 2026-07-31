@@ -124,10 +124,6 @@ Run `go-testcov` on itself:
 make
 ```
 
-- all tests are in `test/` so the main library does not force installation of gomega + ginkgo
-- the files from the root folder are symlinked there to make everything load
-- easiest to work from that folder directly
-
 ### inspecting coverage output
 
 - create a new `foo/main.go` file with the code you want to inspect

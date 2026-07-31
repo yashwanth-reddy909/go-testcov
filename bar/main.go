@@ -2,13 +2,16 @@ package main
 
 import "os"
 
-// some other stuff
-// even more
-// untested section
-func main() {
-	if len(os.Args) < 2 {
-		os.Exit(1)
-	} else {
-		os.Exit(0)
+func run(a, b int) int {
+	x := a +
+		b
+	// untested block
+	if x > 5 {
+		return 1
 	}
+	return 2
+}
+
+func main() {
+	os.Exit(run(len(os.Args), 0))
 }

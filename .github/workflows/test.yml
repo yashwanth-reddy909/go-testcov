@@ -8,7 +8,7 @@ jobs:
   test:
     strategy:
       matrix:
-        go: ["1.26", "1.25", "1.24"] # keep in sync with go.mod and test/go.mod
+        go: ["1.26", "1.25", "1.24"] # keep in sync with go.mod
     runs-on: ubuntu-latest
     steps:
       - uses: actions/setup-go@v2
@@ -18,8 +18,8 @@ jobs:
       - name: Test
         run: make
       - name: go-test
-        run: cd test && go test -race -cover -covermode=atomic
+        run: go test -race -cover -covermode=atomic
       - name: install-test
-        run: go install && cd test && go-testcov
+        run: go install && go-testcov
       - name: vet
         run: go vet && [ -z "`go fmt`" ]
