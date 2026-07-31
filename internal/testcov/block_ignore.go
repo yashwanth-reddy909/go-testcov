@@ -19,6 +19,10 @@ type BlockIgnore struct {
 	random      bool
 }
 
+func (ignore BlockIgnore) ignores(section Section) bool {
+	return ignore.startLine <= section.startLine && section.endLine <= ignore.endLine
+}
+
 // find all `// untested block` comments and the blocks they ignore
 // warns about comments whose block end cannot be found, they ignore nothing
 func findBlockIgnores(lines []string) (ignores []BlockIgnore) {
@@ -56,7 +60,7 @@ func findBlockIgnores(lines []string) (ignores []BlockIgnore) {
 // true when the section is inside one of the given ignored blocks
 func inBlockIgnore(ignores []BlockIgnore, section Section) bool {
 	for _, ignore := range ignores {
-		if ignore.startLine <= section.startLine && section.endLine <= ignore.endLine {
+		if ignore.ignores(section) {
 			return true
 		}
 	}
