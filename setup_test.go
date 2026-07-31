@@ -11,7 +11,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestAwesome(t *testing.T) {
+func TestSetup(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Example")
 }
@@ -136,5 +136,4 @@ func withOsArgs(args []string, fn func()) {
 		os.Args = old
 	}()
 	fn()
-
 }

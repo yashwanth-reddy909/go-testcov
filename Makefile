@@ -11,7 +11,7 @@ build: $(BINARY) ## Build binary
 
 .PHONY: test
 test: build ## Unit test
-	./$(BINARY)
+	./$(BINARY) ./...
 
 install: ## Install binary
 	go install
