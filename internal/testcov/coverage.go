@@ -32,7 +32,7 @@ func CheckCoverage(coverageFilePath string) (exitCode int) {
 
 		// print warnings for parts that incorrectly claim to be untestedSections
 		warnOnTestedBlockIgnore(displayPath, sections, blockIgnores)
-		warnCoveredInlineIgnore(displayPath, sections, inlineIgnores)
+		warnOnTestedInlineIgnore(displayPath, sections, inlineIgnores)
 
 		// find untestedSections sections
 		untestedSections := filter(sections, func(section Section) bool { return section.callCount == 0 })

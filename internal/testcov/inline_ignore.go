@@ -60,8 +60,7 @@ func withoutSectionsInInlineIgnore(sections []Section, inlineIgnores []InlineIgn
 	})
 }
 
-// warn when inline ignore markers point to code that is actually covered
-func warnCoveredInlineIgnore(path string, sections []Section, inlineIgnores []InlineIgnore) {
+func warnOnTestedInlineIgnore(path string, sections []Section, inlineIgnores []InlineIgnore) {
 	for _, ignore := range inlineIgnores {
 		// skip flaky-coverage warnings (goroutines, timing, randomness)
 		if ignore.random {
