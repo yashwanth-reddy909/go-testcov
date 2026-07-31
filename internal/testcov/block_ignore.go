@@ -57,20 +57,12 @@ func findBlockIgnores(lines []string) (ignores []BlockIgnore) {
 	return
 }
 
-// true when the section is inside one of the given ignored blocks
-func inBlockIgnore(ignores []BlockIgnore, section Section) bool {
-	for _, ignore := range ignores {
-		if ignore.ignores(section) {
-			return true
-		}
-	}
-	return false
-}
-
 // remove sections that are inside a `// untested block` ignore
 func removeSectionsInBlockIgnore(sections []Section, blockIgnores []BlockIgnore) []Section {
 	return filter(sections, func(section Section) bool {
-		return !inBlockIgnore(blockIgnores, section)
+		return !anyMatch(blockIgnores, func(ignore BlockIgnore) bool {
+			return ignore.ignores(section)
+		})
 	})
 }
 

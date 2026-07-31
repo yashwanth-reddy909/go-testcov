@@ -37,14 +37,14 @@ func findInlineIgnores(lines []string) (ignores []InlineIgnore) {
 	return
 }
 
+// true when the ignore comment applies to the given line
+func (ignore InlineIgnore) ignores(line int) bool {
+	return ignore.line == line || (ignore.startsLine && ignore.line == line-1)
+}
+
 // true when the line is ignored by one of the given inline comments
 func inInlineIgnore(ignores []InlineIgnore, line int) bool {
-	for _, ignore := range ignores {
-		if ignore.line == line || (ignore.startsLine && ignore.line == line-1) {
-			return true
-		}
-	}
-	return false
+	return anyMatch(ignores, func(ignore InlineIgnore) bool { return ignore.ignores(line) })
 }
 
 // remove sections that are marked with a `// untested section` comment

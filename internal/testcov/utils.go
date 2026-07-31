@@ -96,6 +96,16 @@ func allSectionsInRangeCovered(sections []Section, startLine int, endLine int) b
 	return true
 }
 
+// true when match returns true for at least one item
+func anyMatch[T any](items []T, match func(T) bool) bool {
+	for _, item := range items {
+		if match(item) {
+			return true
+		}
+	}
+	return false
+}
+
 // keep only the items for which keep returns true
 func filter[T any](items []T, keep func(T) bool) []T {
 	kept := []T{}
