@@ -3,10 +3,15 @@ package main
 import "os"
 
 func run(a, b int) int {
-	x := a +
-		b
+	if a > 0 {
+		return -1
+	} else {
+		x := b +
+			1
+		_ = x
+	}
 	// untested block
-	if x > 5 {
+	if b > 5 {
 		return 1
 	}
 	return 2
