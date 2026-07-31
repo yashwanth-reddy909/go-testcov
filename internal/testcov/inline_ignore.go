@@ -1,4 +1,4 @@
-package main
+package testcov
 
 import (
 	"fmt"
@@ -37,19 +37,19 @@ func findInlineIgnores(lines []string) (ignores []InlineIgnore) {
 	return
 }
 
+// true when the ignore comment applies to the given line
+func (ignore InlineIgnore) ignores(line int) bool {
+	return ignore.line == line || (ignore.startsLine && ignore.line == line-1)
+}
+
 // true when the line is ignored by one of the given inline comments
 func inInlineIgnore(ignores []InlineIgnore, line int) bool {
-	for _, ignore := range ignores {
-		if ignore.line == line || (ignore.startsLine && ignore.line == line-1) {
-			return true
-		}
-	}
-	return false
+	return anyMatch(ignores, func(ignore InlineIgnore) bool { return ignore.ignores(line) })
 }
 
 // remove sections that are marked with a `// untested section` comment
 // NOTE: this is a bit rough as it does not account for partial lines via start/end characters
-func removeSectionsInInlineIgnore(sections []Section, inlineIgnores []InlineIgnore) []Section {
+func withoutSectionsInInlineIgnore(sections []Section, inlineIgnores []InlineIgnore) []Section {
 	return filter(sections, func(section Section) bool {
 		for lineNumber := section.startLine; lineNumber <= section.endLine; lineNumber++ {
 			if inInlineIgnore(inlineIgnores, lineNumber) {
@@ -60,54 +60,30 @@ func removeSectionsInInlineIgnore(sections []Section, inlineIgnores []InlineIgno
 	})
 }
 
-// warn when inline ignore markers point to code that is actually covered
-func warnCoveredInlineIgnore(path string, sections []Section, inlineIgnores []InlineIgnore) {
+func warnOnTestedInlineIgnore(path string, sections []Section, inlineIgnores []InlineIgnore) {
 	for _, ignore := range inlineIgnores {
 		// skip flaky-coverage warnings (goroutines, timing, randomness)
 		if ignore.random {
 			continue
 		}
 
-		if allSectionsOnLineCovered(sections, ignore.line) {
-			_, _ = fmt.Fprintf(
-				os.Stderr,
-				"go-testcov (warn): %v:%v has `// untested section` but is tested\n",
-				path, ignore.line,
-			)
-		} else if ignore.startsLine && allSectionsStartingAtLineCovered(sections, ignore.line+1) {
-			_, _ = fmt.Fprintf(
-				os.Stderr,
-				"go-testcov (warn): %v:%v has `// untested section` but the code below is tested\n",
-				path, ignore.line,
-			)
-		}
-	}
-}
-
-// true when at least one section spans this source line and all such sections are covered
-func allSectionsOnLineCovered(sections []Section, line int) bool {
-	covered := false
-	for _, section := range sections {
-		if section.startLine <= line && line <= section.endLine {
-			if section.callCount == 0 {
-				return false
+		if ignore.startsLine {
+			// TODO: ideally you should be allowed to have a long comment block and then the code
+			if allSectionsInRangeTested(sections, ignore.line+1, ignore.line+1) {
+				_, _ = fmt.Fprintf(
+					os.Stderr,
+					"go-testcov (warn): %v:%v has `// untested section` but the code below is tested\n",
+					path, ignore.line,
+				)
 			}
-			covered = true
-		}
-	}
-	return covered
-}
-
-// true when at least one section starts exactly on this line and all such sections are covered
-func allSectionsStartingAtLineCovered(sections []Section, line int) bool {
-	covered := false
-	for _, section := range sections {
-		if section.startLine == line {
-			if section.callCount == 0 {
-				return false
+		} else {
+			if allSectionsInRangeTested(sections, ignore.line, ignore.line) {
+				_, _ = fmt.Fprintf(
+					os.Stderr,
+					"go-testcov (warn): %v:%v has `// untested section` but is tested\n",
+					path, ignore.line,
+				)
 			}
-			covered = true
 		}
 	}
-	return covered
 }

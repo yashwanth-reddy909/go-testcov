@@ -1,4 +1,4 @@
-package main
+package testcov
 
 import (
 	"fmt"
@@ -17,6 +17,10 @@ type BlockIgnore struct {
 	startLine   int // first line of the ignored block
 	endLine     int // last line of the ignored block, the closing `}`
 	random      bool
+}
+
+func (ignore BlockIgnore) ignores(section Section) bool {
+	return ignore.startLine <= section.startLine && section.endLine <= ignore.endLine
 }
 
 // find all `// untested block` comments and the blocks they ignore
@@ -53,32 +57,22 @@ func findBlockIgnores(lines []string) (ignores []BlockIgnore) {
 	return
 }
 
-// true when the section is inside one of the given ignored blocks
-func inBlockIgnore(ignores []BlockIgnore, section Section) bool {
-	for _, ignore := range ignores {
-		if ignore.startLine <= section.startLine && section.endLine <= ignore.endLine {
-			return true
-		}
-	}
-	return false
-}
-
-// remove sections that are inside a `// untested block` ignore
-func removeSectionsInBlockIgnore(sections []Section, blockIgnores []BlockIgnore) []Section {
+func withoutSectionsInBlockIgnore(sections []Section, blockIgnores []BlockIgnore) []Section {
 	return filter(sections, func(section Section) bool {
-		return !inBlockIgnore(blockIgnores, section)
+		return !anyMatch(blockIgnores, func(ignore BlockIgnore) bool {
+			return ignore.ignores(section)
+		})
 	})
 }
 
-// warn when blocks are actually tested
-func warnCoveredBlockIgnore(path string, sections []Section, blockIgnores []BlockIgnore) {
+func warnOnTestedBlockIgnore(path string, sections []Section, blockIgnores []BlockIgnore) {
 	for _, ignore := range blockIgnores {
 		// skip flaky-coverage warnings (goroutines, timing, randomness)
 		if ignore.random {
 			continue
 		}
 
-		if allSectionsInRangeCovered(sections, ignore.startLine, ignore.endLine) {
+		if allSectionsInRangeTested(sections, ignore.startLine, ignore.endLine) {
 			_, _ = fmt.Fprintf(
 				os.Stderr,
 				"go-testcov (warn): %v:%v has `// untested block` but the block is tested\n",
@@ -86,20 +80,6 @@ func warnCoveredBlockIgnore(path string, sections []Section, blockIgnores []Bloc
 			)
 		}
 	}
-}
-
-// true when at least one section is contained in the range and all such sections are covered
-func allSectionsInRangeCovered(sections []Section, startLine int, endLine int) bool {
-	covered := false
-	for _, section := range sections {
-		if startLine <= section.startLine && section.endLine <= endLine {
-			if section.callCount == 0 {
-				return false
-			}
-			covered = true
-		}
-	}
-	return covered
 }
 
 // find the first line starting with the search term

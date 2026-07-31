@@ -1,4 +1,4 @@
-package main
+package testcov
 
 import (
 	. "github.com/onsi/ginkgo"

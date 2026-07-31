@@ -1,4 +1,4 @@
-package main
+package testcov
 
 import (
 	"fmt"
@@ -85,6 +85,25 @@ func stringToInt(string string) int {
 func lineNumberOfMatch(content string) int {
 	index := perFileIgnore.FindStringIndex(content)[0]
 	return strings.Count(content[0:index], "\n") + 1
+}
+
+func allSectionsInRangeTested(sections []Section, startLine int, endLine int) bool {
+	for _, section := range sections {
+		if section.startLine <= endLine && section.endLine >= startLine && section.callCount == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// true when match returns true for at least one item
+func anyMatch[T any](items []T, match func(T) bool) bool {
+	for _, item := range items {
+		if match(item) {
+			return true
+		}
+	}
+	return false
 }
 
 // keep only the items for which keep returns true

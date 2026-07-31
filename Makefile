@@ -3,7 +3,7 @@
 all: build test
 
 BINARY = go-testcov
-$(BINARY): *.go go.mod go.sum
+$(BINARY): *.go internal/testcov/*.go go.mod go.sum
 	go build -trimpath -o $(BINARY)
 
 .PHONY: build
@@ -11,7 +11,7 @@ build: $(BINARY) ## Build binary
 
 .PHONY: test
 test: build ## Unit test
-	cd test && ../$(BINARY)
+	./$(BINARY) ./...
 
 install: ## Install binary
 	go install

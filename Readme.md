@@ -5,7 +5,7 @@
  - 🎉 **Instant** and **actionable** feedback on 💚 test run
  - 🚀 Fast PRs: avoid comments and CI failures
  - 💰 No 3rd-party payment / integration / security-leaks 
- - Highlight untested code sections with inline `// untested section` comment
+ - Highlight untested code sections with inline `// untested section` comment (or on the line above as a separate comment)
  - Onboard untested code (top of the file `// untested sections: 5` comment, warns when below)
  - Ignore untested files (top of the file `// untested sections: ignore` comment)
  - Ignore large amounts of poorly tested code (top of the file `// untested sections: 50%` comment, does not warn when below that %)
@@ -123,10 +123,6 @@ Run `go-testcov` on itself:
 ```
 make
 ```
-
-- all tests are in `test/` so the main library does not force installation of gomega + ginkgo
-- the files from the root folder are symlinked there to make everything load
-- easiest to work from that folder directly
 
 ### inspecting coverage output
 

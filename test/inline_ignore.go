@@ -1,1 +1,0 @@
-../inline_ignore.go

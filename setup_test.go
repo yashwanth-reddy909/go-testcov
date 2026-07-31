@@ -2,15 +2,16 @@ package main
 
 import (
 	"bytes"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 	"io"
 	"io/ioutil"
 	"os"
 	"testing"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
-func TestAwesome(t *testing.T) {
+func TestSetup(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Example")
 }
@@ -27,14 +28,6 @@ func writeFile(path string, content string) {
 	noError(err)
 }
 
-func withTempFile(content string, fn func(*os.File)) {
-	file, err := ioutil.TempFile("", "go-testcov")
-	noError(err)
-	defer os.Remove(file.Name())
-	writeFile(file.Name(), content)
-	fn(file)
-}
-
 func withTempDir(fn func(string)) {
 	dir, err := ioutil.TempDir("", "go-testcov")
 	noError(err)
@@ -42,36 +35,11 @@ func withTempDir(fn func(string)) {
 	fn(dir)
 }
 
-func withFakeGoPath(fn func(goPath string)) {
-	withTempDir(func(dir string) {
-		err := os.Mkdir(joinPath(dir, "src"), 0700)
-		noError(err)
-		withEnv("GOPATH", dir, func() {
-			fn(dir)
-		})
-	})
-}
-
 func withEnv(key string, value string, fn func()) {
 	old := os.Getenv(key)
 	os.Setenv(key, value)
 	defer os.Setenv(key, old)
 	fn()
-}
-
-func withoutEnv(key string, fn func()) {
-	old, wasSet := os.LookupEnv(key)
-	if wasSet {
-		os.Unsetenv(key)
-		defer os.Setenv(key, old)
-	}
-	fn()
-}
-
-func inTempDir(fn func()) {
-	withTempDir(func(dir string) {
-		chDir(dir, fn)
-	})
 }
 
 func chDir(dir string, fn func()) {
@@ -168,5 +136,4 @@ func withOsArgs(args []string, fn func()) {
 		os.Args = old
 	}()
 	fn()
-
 }
