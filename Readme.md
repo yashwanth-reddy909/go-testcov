@@ -132,6 +132,7 @@ make
 
 ## Release
 
+- never release a major version unless absolutely necessary, since that requires a /v2 path
 - make new version commit that changes version in readme "Makefile setup" + main.go
 - push and tag the commit
 
