@@ -7,7 +7,7 @@ import (
 	"github.com/grosser/go-testcov/internal/testcov"
 )
 
-const version = "v1.15.0"
+const version = "v1.16.0"
 
 // test injection point to enable test coverage of exit behavior
 var exitFunction = os.Exit
